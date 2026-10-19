@@ -2,4 +2,3 @@
 bin/
 compare/python/.venv/
 __pycache__/
-agent
