@@ -1,11 +1,12 @@
-# go-mcp-demo: AI tools over MCP, written in Go
+# Building MCP Agents in Go
 
-Go servers that give an AI agent tools through the
-[Model Context Protocol](https://modelcontextprotocol.io) (MCP). The main example works
-out the root cause of a production incident from its logs: it counts errors per minute,
-finds the deploy that lined up with the spike, and reads the failing log lines. A smaller
-example fetches weather forecasts and alerts. Both use the official
-[Go SDK](https://github.com/modelcontextprotocol/go-sdk).
+Two learning projects for building AI agents in Go that use tools through the
+[Model Context Protocol](https://modelcontextprotocol.io) (MCP), with the official
+[Go SDK](https://github.com/modelcontextprotocol/go-sdk). The main project is an agent
+that works out the root cause of a production incident from its logs. Claude decides
+which tools to call: it counts errors per minute, finds the deploy that lined up with
+the spike, and reads the failing log lines. The second project covers the basics, an
+MCP client calling weather tools backed by the US National Weather Service.
 
 ![A log investigation in the terminal: four tool calls, then the root cause](docs/investigation.png)
 
@@ -41,8 +42,8 @@ of the log files.
 
 ## Projects
 
-Both mini-projects are dummy projects for demonstration purposes, not production
-services.
+Each project explores a different part of MCP in Go. The incident logs are synthetic,
+so the investigation runs entirely on your machine, with no access to real systems.
 
 | Project | What it shows |
 |---|---|
