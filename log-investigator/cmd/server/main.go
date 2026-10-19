@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"log-investigator/internal/logstore"
 	"time"
@@ -84,7 +85,10 @@ func main() {
 		Version: "1.0.0",
 	}, nil)
 
-	store, err := logstore.Open("data")
+	dataDir := flag.String("data", "data", "directory containing the JSONL logs")
+	flag.Parse()
+
+	store, err := logstore.Open(*dataDir)
 	if err != nil {
 		log.Fatal(err)
 	}
