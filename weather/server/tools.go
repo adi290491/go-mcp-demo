@@ -8,94 +8,64 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+const maxForecastPeriods = 5
+
 func getForecast(ctx context.Context, req *mcp.CallToolRequest, input ForecastInput) (*mcp.CallToolResult, any, error) {
-	pointsURL := fmt.Sprintf("%s/points/%f,%f", NWSAPIBase, input.Latitude, input.Longitude)
-	pointsData, err := makeNWSRequest[PointsResponse](ctx, pointsURL)
-
+	// NWS needs two hops: lat/long -> grid point -> forecast URL.
+	pointsURL := fmt.Sprintf("%s/points/%f,%f", nwsAPIBase, input.Latitude, input.Longitude)
+	points, err := makeNWSRequest[PointsResponse](ctx, pointsURL)
 	if err != nil {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: "Unable to fetch forecast data for this location."},
-			},
-		}, nil, nil
+		return errorResult("Unable to fetch forecast data for this location."), nil, nil
 	}
 
-	forecastURL := pointsData.Properies.Forecast
+	forecastURL := points.Properties.Forecast
 	if forecastURL == "" {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: "Unable to fetch forecast URL."},
-			},
-		}, nil, nil
+		return errorResult("Unable to fetch forecast URL."), nil, nil
 	}
 
-	forecastData, err := makeNWSRequest[ForecastResponse](ctx, forecastURL)
+	forecast, err := makeNWSRequest[ForecastResponse](ctx, forecastURL)
 	if err != nil {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: "Unable to fetch detailed forecast."},
-			},
-		}, nil, nil
+		return errorResult("Unable to fetch detailed forecast."), nil, nil
 	}
 
-	periods := forecastData.Properties.Periods
+	periods := forecast.Properties.Periods
 	if len(periods) == 0 {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: "No forecast periods available"},
-			},
-		}, nil, nil
+		return textResult("No forecast periods available."), nil, nil
 	}
 
-	var forecasts []string
-	for i := range min(5, len(periods)) {
-		forecasts = append(forecasts, formatPeriod(periods[i]))
+	var formatted []string
+	for _, p := range periods[:min(maxForecastPeriods, len(periods))] {
+		formatted = append(formatted, formatPeriod(p))
 	}
-
-	result := strings.Join(forecasts, "\n--\n")
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{Text: result},
-		},
-	}, nil, nil
+	return textResult(strings.Join(formatted, "\n---\n")), nil, nil
 }
 
-func getAlerts(ctx context.Context, req *mcp.CallToolRequest, input AlertsInput) (
-	*mcp.CallToolResult, any, error,
-) {
-	// Build alerts URL
-	stateCode := strings.ToUpper(input.State)
-	alertsURL := fmt.Sprintf("%s/alerts/active/area/%s", NWSAPIBase, stateCode)
-
-	alertsData, err := makeNWSRequest[AlertsResponse](ctx, alertsURL)
+func getAlerts(ctx context.Context, req *mcp.CallToolRequest, input AlertsInput) (*mcp.CallToolResult, any, error) {
+	alertsURL := fmt.Sprintf("%s/alerts/active/area/%s", nwsAPIBase, strings.ToUpper(input.State))
+	alerts, err := makeNWSRequest[AlertsResponse](ctx, alertsURL)
 	if err != nil {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: "Unable to fetch alerts or no alerts found."},
-			},
-		}, nil, nil
+		return errorResult("Unable to fetch alerts."), nil, nil
 	}
 
-	// Check if there are any alerts
-	if len(alertsData.Features) == 0 {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: "No active alerts for this state."},
-			},
-		}, nil, nil
+	if len(alerts.Features) == 0 {
+		return textResult("No active alerts for this state."), nil, nil
 	}
 
-	// Format alerts
-	var alerts []string
-	for _, feature := range alertsData.Features {
-		alerts = append(alerts, formatAlert(feature))
+	var formatted []string
+	for _, f := range alerts.Features {
+		formatted = append(formatted, formatAlert(f))
 	}
+	return textResult(strings.Join(formatted, "\n---\n")), nil, nil
+}
 
-	result := strings.Join(alerts, "\n---\n")
+func textResult(text string) *mcp.CallToolResult {
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}}
+}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{Text: result},
-		},
-	}, nil, nil
+// errorResult flags the result as a tool error so the client (and Claude)
+// can tell a failed lookup apart from a successful one.
+func errorResult(text string) *mcp.CallToolResult {
+	res := textResult(text)
+	res.IsError = true
+	return res
 }

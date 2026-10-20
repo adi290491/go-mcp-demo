@@ -1,7 +1,7 @@
 package main
 
 type PointsResponse struct {
-	Properies struct {
+	Properties struct {
 		Forecast string `json:"forecast"`
 	} `json:"properties"`
 }

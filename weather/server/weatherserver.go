@@ -15,12 +15,12 @@ func main() {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_forecast",
-		Description: "Get weather forecast for a location",
+		Description: "Get the weather forecast for a US location by latitude and longitude",
 	}, getForecast)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_alerts",
-		Description: "Get weather alerts for a US state",
+		Description: "Get active weather alerts for a US state",
 	}, getAlerts)
 
 	if err := server.Run(context.Background(), &mcp.StdioTransport{}); err != nil {

@@ -1,65 +1,81 @@
 package main
 
 import (
+	"bufio"
 	"context"
-	"encoding/json"
+	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
+	"strings"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/anthropics/anthropic-sdk-go/option"
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	ctx := context.Background()
+	serverPath := flag.String("server", "./weather", "path to the weather MCP server binary")
+	flag.Parse()
 
-	// Create a new client
-	client := mcp.NewClient(&mcp.Implementation{Name: "weather-client", Version: "v1.0.0"}, nil)
-
-	// connect to a server over stdin/stdout
-	transport := &mcp.CommandTransport{
-		Command: exec.Command("./weather"),
+	apiKey, err := loadAPIKey()
+	if err != nil {
+		log.Fatal(err)
 	}
+	client := anthropic.NewClient(option.WithAPIKey(apiKey))
 
-	session, err := client.Connect(ctx, transport, nil)
+	ctx := context.Background()
+	session, err := connectMCP(ctx, *serverPath)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer session.Close()
 
-	// call the tool
-	tools, err := session.ListTools(ctx, nil)
+	listed, err := session.ListTools(ctx, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	for _, t := range tools.Tools {
+	for _, t := range listed.Tools {
 		fmt.Printf("- %s: %s\n", t.Name, t.Description)
 	}
 
-	if len(os.Args) < 2 {
-		return
-	}
-	// 2. Call a tool
-	var args map[string]any
-	if len(os.Args) > 2 {
-		if err := json.Unmarshal([]byte(os.Args[2]), &args); err != nil {
-			log.Fatalf("bad json args: %v", err)
-		}
-	}
-	res, err := session.CallTool(ctx, &mcp.CallToolParams{
-		Name:      os.Args[1],
-		Arguments: args,
-	})
+	tools, err := mcpToolsToAnthropic(listed.Tools)
 	if err != nil {
-		log.Fatalf("call tool failed: %v", err)
+		log.Fatal(err)
 	}
-	if res.IsError {
-		fmt.Println("tool reported an error:")
+
+	agent := NewAgent(&client, session, tools, stdinReader())
+	if err := agent.Run(ctx); err != nil {
+		log.Fatalf("Error: %v", err)
 	}
-	for _, c := range res.Content {
-		if tc, ok := c.(*mcp.TextContent); ok {
-			fmt.Println(tc.Text)
+}
+
+// stdinReader returns a function that yields one line of stdin per call.
+func stdinReader() func() (string, bool) {
+	scanner := bufio.NewScanner(os.Stdin)
+	return func() (string, bool) {
+		if !scanner.Scan() {
+			return "", false
 		}
+		return scanner.Text(), true
 	}
+}
+
+// loadAPIKey reads ANTHROPIC_API_KEY from the environment or a local .env file.
+func loadAPIKey() (string, error) {
+	if err := godotenv.Load(); err != nil {
+		return "", fmt.Errorf("load .env file: %w", err)
+	}
+
+	apiKey := os.Getenv("ANTHROPIC_API_KEY")
+	switch {
+	case apiKey == "":
+		return "", errors.New("ANTHROPIC_API_KEY is not set - add it to .env or the environment")
+	case strings.TrimSpace(apiKey) != apiKey:
+		return "", errors.New("ANTHROPIC_API_KEY has leading or trailing whitespace")
+	case !strings.HasPrefix(apiKey, "sk-ant-"):
+		return "", errors.New("ANTHROPIC_API_KEY doesn't start with sk-ant- - check you're using an Anthropic key")
+	}
+	return apiKey, nil
 }

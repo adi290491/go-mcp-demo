@@ -9,10 +9,10 @@ import (
 	"net/http"
 )
 
-const (
-	NWSAPIBase = "https://api.weather.gov"
-	UserAgent  = "weather-app/1.0"
-)
+const userAgent = "weather-app/1.0"
+
+// nwsAPIBase is a var so tests can point it at a fake server.
+var nwsAPIBase = "https://api.weather.gov"
 
 func makeNWSRequest[T any](ctx context.Context, url string) (*T, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -20,7 +20,7 @@ func makeNWSRequest[T any](ctx context.Context, url string) (*T, error) {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "application/geo+json")
 
 	client := http.DefaultClient
@@ -46,7 +46,7 @@ func makeNWSRequest[T any](ctx context.Context, url string) (*T, error) {
 
 func formatAlert(alert AlertFeature) string {
 	props := alert.Properties
-	event := cmp.Compare(props.Event, "Unknown")
+	event := cmp.Or(props.Event, "Unknown")
 	areaDesc := cmp.Or(props.AreaDesc, "Unknown")
 	severity := cmp.Or(props.Severity, "Unknown")
 	description := cmp.Or(props.Description, "No description available")
